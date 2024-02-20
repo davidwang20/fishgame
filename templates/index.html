@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fish Food Game</title>
+<style>
+  body, html {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #f0f0f0;
+    font-family: "Segoe UI";
+    font-weight: bold;
+    user-select: none;
+  }
+  #prev {
+    
+  }
+  #red-rectangle {
+    background-color: #f4a259;
+    transition: width 0.5s, height 0.5s;
+    display: flex;
+    justify-content: center; /* Center children horizontally */
+    align-items: center;
+    position: relative; /* Needed to position green rectangles at the bottom and top */
+    overflow: visible; /* Ensure children are not clipped */
+    border-radius:50px;
+    border-style:solid;
+    border-width:2px;
+    border-color:#D47229;
+  }
+  .green-rectangle {
+    background-color: #8cb369;
+    transition: width 0.5s, height 0.5s;
+    width: 40px; /* Width of each green rectangle */
+    height: 40px; /* Height of each green rectangle */
+    margin: 0 5px; /* Horizontal margin */
+    display: flex;
+    justify-content: center; /* Center the emoji horizontally */
+    align-items: center; /* Center the emoji vertically */
+    font-size: 15px; /* Adjust the size of the emoji */
+    border-radius:4px;
+    border-width:2px;
+    border-style:solid;
+    border-color:#f4e285;
+  }
+  #green-container-below > .green-rectangle:hover {
+    cursor: pointer;
+  }
+  #green-container-below, #green-container-above, #green-container-below-upper, #green-container-above-lower, #go, #awaitmsg {
+    position: absolute;
+    display: flex;
+    justify-content: center; /* Center green rectangles in the container */
+    width: 100%; /* Ensure container spans the width of the red rectangle */
+  }
+  #green-container-below {
+    bottom: -60px; /* Move container below the red rectangle */
+  }
+  #green-container-below-upper {
+    bottom: 10px; /* Move container above the red rectangle bottom */
+  }
+  #green-container-above {
+    top: -60px; /* Move container above the red rectangle */
+  }
+  #green-container-above-lower {
+    top: 10px; /* Move container above the red rectangle */
+  }
+  #go {
+    bottom: -90px;
+    width: 50px;
+    cursor: pointer;
+  }
+  #awaitmsg {
+    bottom: -120px;
+    width: 500px;
+    display: none;
+  }
+  table {
+    top: 10px;
+    padding-right:20px;
+  }
+  th, td {
+    top: 10px;
+    border:1px solid black;
+    padding-right:20px;
+  }
+</style>
+</head>
+<body>
+<table>
+  <tr>
+    <th>Card</th>
+    <th>Value</th>
+  </tr>
+  <tr>
+    <td>🍤</td>
+    <td>x2=5</td>
+  </tr>
+  <tr>
+    <td>🍮</td>
+    <td>most after 3 round=6</td>
+  </tr>
+  <tr>
+    <td>🥟</td>
+    <td>xn = n * (n + 1) / 2</td>
+  </tr>
+  <tr>
+    <td>🍣y</td>
+    <td>y</td>
+  </tr>
+  <tr>
+    <td>🌱</td>
+    <td>*3 next 🍣</td>
+  </tr>
+  <tr>
+    <td>🐟</td>
+    <td>x3=10</td>
+  </tr>
+    <tr>
+    <td>🍥y</td>
+    <td>most Σy = 6, least Σy=3</td>
+  </tr>
+  </tr>
+    <tr>
+    <td>🥢</td>
+    <td>take 2</td>
+  </tr>
+</table>
+<div id="red-rectangle">
+  <div id="prev">Previous Rounds<br/>Net Points: +0<br/>Net Puddings: +0</div>
+  <div id="green-container-above">
+  </div>
+  <div id="green-container-below">
+  </div>
+  <div id="green-container-below-upper">
+  </div>
+  <div id="green-container-above-lower">
+  </div>
+  <button id="go" onclick="go();">Go!</button>
+  <div id="awaitmsg">Awaiting server response. Unfortunately, this may take up to 30 minutes if there are 8 cards in hand.</div>
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script>
+card_map = {"Tempura":"🍤", "Pudding":"🍮", "Dumpling":"🥟", "Chopsticks":"🥢", "1Nigiri":"🍣1", "2Nigiri":"🍣2", "3Nigiri":"🍣3", "Wasabi":"🌱", "1Maki":"🍥1", "2Maki":"🍥2", "3Maki":"🍥3", "Sashimi":"🐟"};
+comp_state = '{"cards": ["Tempura", "Dumpling", "Dumpling", "Dumpling", "1Maki", "1Maki", "2Maki"], "table": ["3Maki", "Sashimi"], "puddings": 0}';
+player_state = '{"cards": ["Tempura", "Tempura", "Pudding", "Pudding", "Wasabi", "2Maki", "3Maki"], "table": ["3Nigiri", "Chopsticks"], "puddings": 0}';
+prev_points = 0;
+prev_puddings = 0;
+max_select = 1;
+selected = 0;
+curr_round = 1;
+
+function resizeRectangle() {
+  var windowHeight = window.innerHeight;
+  var windowWidth = window.innerWidth;
+  var rectangle = document.getElementById('red-rectangle');
+  rectangle.style.width = (windowWidth * 0.5 < 600 ? (windowWidth * 0.5 > 500 ? windowWidth * 0.5: 500): 600) + 'px';
+  rectangle.style.height = (windowHeight * 0.5 < 300 ? (windowHeight * 0.5 > 200 ? windowHeight * 0.5: 200): 300) + 'px';
+}
+
+function resizeGreenRect() {
+  var windowHeight = window.innerHeight;
+  var windowWidth = window.innerWidth;
+  var dim = windowHeight < windowWidth ? windowHeight : windowWidth;
+  $('.green-rectangle').each((i, x) => {
+    $(x).height(dim * 0.08 < 50 ? (dim * 0.08 > 40 ? dim * 0.08 : 40) : 50);
+    $(x).width(dim * 0.08 < 50 ? (dim * 0.08 > 40 ? dim * 0.08 : 40) : 50);
+  });
+}
+
+function cardClick(e) {
+  var curr = $(e).css('border-top-color');
+  var deselected = curr != 'rgb(128, 0, 128)';
+  if (deselected) {
+    $(e).css('border-color', 'purple');
+  	selected += 1;
+  } else {
+    $(e).css('border-color', '#f4e285');
+  	selected -= 1;  
+  }
+  if (selected > max_select) {
+  	selected = 0;
+    $('#green-container-below > .green-rectangle').css('border-color', '#f4e285');
+    $(e).css('border-color', 'purple');
+  	selected += 1;
+  }
+}
+
+function disableButton() {
+  $('#go').css('display', 'none');
+  $('#awaitmsg').css('display', 'block');
+}
+
+function enableButton() {
+  $('#go').css('display', 'block');
+  $('#awaitmsg').css('display', 'none');
+}
+
+function go() {
+  var sel = [];
+  $('#green-container-below > .green-rectangle').each((i, x) => {
+      if ($(x).css('border-color') == 'rgb(128, 0, 128)') {
+          sel.push(parseInt($(x).attr('cnt')));
+      }
+  });
+  if (sel.length == 0) {
+    return;
+  }
+  disableButton();
+  fetch('/go', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      selection: sel, 
+      compstate: comp_state, 
+      playerstate: player_state,
+      prevpoints: prev_points,
+    }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log(data);
+    paintGame(data.p1, data.p2, data.prevpoints);
+  }).catch(
+    (error) => {
+      console.log(error);
+    }
+  );
+}
+
+function newRound() {
+  fetch('/newround', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      compstate: comp_state, 
+      playerstate: player_state, 
+      prevpoints: prev_points,
+      currround: curr_round,
+    }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log(data);
+    paintGame(data.p1, data.p2, data.prevpoints);
+  })
+  .catch(
+    (error) => {
+      console.log(error);
+    }
+  );
+}
+
+function paintGame(comp, player, prevpoints) {
+  enableButton();
+  if (curr_round > 3) {
+    var puddingdelta = player.puddings - comp.puddings;
+    $('#prev').html(`Previous Rounds<br/>Net Points: ${-prevpoints}<br/>Net Puddings: ${puddingdelta}`);
+    return;
+  }
+  comp_state = JSON.stringify(comp);
+  player_state = JSON.stringify(player);
+  prev_points = prevpoints;
+  $('#green-container-above').empty();
+  $('#green-container-above-lower').empty();
+  $('#green-container-below').empty();
+  $('#green-container-below-upper').empty();
+  comp.cards.forEach((x) => {
+  	$('#green-container-above').append($('<div class="green-rectangle">' + card_map[x] + '</div>'));
+  });
+  comp.table.forEach((x) => {
+  	$('#green-container-above-lower').append($('<div class="green-rectangle">' + card_map[x] + '</div>'));
+  });
+  var i = 0;
+  player.cards.forEach((x) => {
+  	$('#green-container-below').append($('<div class="green-rectangle" cnt=' + i + ' onclick="cardClick(this);">' + card_map[x] + '</div>'));
+    i += 1;
+  });
+  player.table.forEach((x) => {
+  	$('#green-container-below-upper').append($('<div class="green-rectangle">' + card_map[x] + '</div>'));
+  });
+  if (player.table.includes('Chopsticks')) {
+    max_select = 2;
+  } else {
+    max_select = 1;
+  }
+  var puddingdelta = player.puddings - comp.puddings;
+  $('#prev').html(`Previous Rounds<br/>Net Points: ${-prevpoints}<br/>Net Puddings: ${puddingdelta}`)
+  if (player.cards.length == 0) {
+    console.log('newround');
+    curr_round += 1;
+    newRound();
+  }
+  selected = 0;
+}
+
+function initGame() {
+  fetch('/initgame', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+  .then(response => response.json())
+  .then(data => {
+    paintGame(data.p1, data.p2, data.prevpoints);
+  }).catch(
+    (error) => {
+      console.log(error);
+    }
+  );
+}
+// Call resizeRectangle on window resize and initial load
+// window.addEventListener('resize', resizeRectangle);
+// window.addEventListener('resize', resizeGreenRect);
+window.addEventListener('load', resizeGreenRect);
+window.addEventListener('load', resizeRectangle);
+window.addEventListener('load', initGame);
+
+</script>
+</body>
+</html>
+
